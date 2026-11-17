@@ -128,3 +128,26 @@ def _item(x: dict[str, Any]) -> dict[str, Any]:
         "progress": round(100 * (x.get("bookmark") or 0) / x["duration"]) if x.get("duration") else None,
         "url": f"https://www.netflix.com/title/{x.get('series') or x.get('movieID')}" if (x.get("series") or x.get("movieID")) else None,
     }
+
+
+class HelperHistory:
+    """Reads history through the One Stop Sign-in Helper add-on, which keeps the signed-in browser."""
+
+    def __init__(self, session: aiohttp.ClientSession, base: str, account: str, profile: str | None = None) -> None:
+        self._s, self.base, self.account, self.profile = session, base, account, profile
+        self.cookies_changed = False
+
+    async def viewing_activity(self, pages: int = 1, page_size: int = 40) -> list[dict[str, Any]]:
+        try:
+            async with self._s.post(self.base + "/netflix/history", json={"account": self.account, "size": page_size * pages},
+                                    timeout=aiohttp.ClientTimeout(total=60)) as r:
+                data = await r.json(content_type=None)
+        except Exception as err:
+            raise NetflixError(f"Sign-in helper not reachable: {err}") from err
+        if data.get("error") in ("signed_out", "unknown_account"):
+            raise NetflixAuthError(data["error"])
+        if data.get("error"):
+            raise NetflixError(data["error"])
+        if data.get("profile") and not self.profile:
+            self.profile = data["profile"]
+        return [_item(x) for x in data.get("items") or []]

@@ -9,7 +9,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
-from .api import NetflixAuthError, NetflixError, NetflixHistory
+from .api import HelperHistory, NetflixAuthError, NetflixError, NetflixHistory
 from .const import CACHE_SECONDS, CONF_NETFLIX_ID, CONF_SECURE_ID, DOMAIN
 
 SERVICE = "get_history"
@@ -20,7 +20,11 @@ SCHEMA = vol.Schema({vol.Optional("limit", default=30): vol.All(int, vol.Range(m
 class Link:
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass, self.entry = hass, entry
-        self.api = NetflixHistory(async_get_clientsession(hass), entry.data[CONF_NETFLIX_ID], entry.data[CONF_SECURE_ID])
+        sess = async_get_clientsession(hass)
+        if entry.data.get("account"):
+            self.api = HelperHistory(sess, entry.data["helper"], entry.data["account"], entry.data.get("profile"))
+        else:
+            self.api = NetflixHistory(sess, entry.data[CONF_NETFLIX_ID], entry.data[CONF_SECURE_ID])
         self.items: list = []
         self.t = 0.0
         self.error: str | None = None
