@@ -1,0 +1,10 @@
+get_history:
+  fields:
+    limit:
+      default: 30
+      selector:
+        number: {min: 1, max: 200}
+    refresh:
+      default: false
+      selector:
+        boolean: {}

@@ -1,0 +1,11 @@
+{
+  "domain": "one_stop_netflix",
+  "name": "One Stop Netflix history",
+  "codeowners": ["@lilwangang"],
+  "config_flow": true,
+  "documentation": "https://github.com/lilwangang/one-stop-netflix",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/lilwangang/one-stop-netflix/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

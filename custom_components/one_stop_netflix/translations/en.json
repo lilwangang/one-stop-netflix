@@ -1,0 +1,47 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Netflix",
+        "description": "On a computer, sign in at netflix.com and pick the profile you want (for example the family profile). Then open the browser's developer tools (Chrome: View → Developer → Developer Tools), go to Application → Cookies → https://www.netflix.com, and copy the Value of NetflixId and SecureNetflixId into the boxes below. These act like a password: they stay in Home Assistant and are only sent to netflix.com.",
+        "data": {
+          "netflix_id": "NetflixId",
+          "secure_netflix_id": "SecureNetflixId"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Netflix",
+        "description": "Netflix signed this connection out (this happens after a password change or every few months). On a computer, sign in at netflix.com and pick the profile you want (for example the family profile). Then open the browser's developer tools (Chrome: View → Developer → Developer Tools), go to Application → Cookies → https://www.netflix.com, and copy the Value of NetflixId and SecureNetflixId into the boxes below. These act like a password: they stay in Home Assistant and are only sent to netflix.com.",
+        "data": {
+          "netflix_id": "NetflixId",
+          "secure_netflix_id": "SecureNetflixId"
+        }
+      }
+    },
+    "error": {
+      "signed_out": "Netflix didn't accept those values. Make sure you copied both, while signed in, with no extra spaces.",
+      "cannot_read": "Signed in, but Netflix's history page answered in a way this doesn't understand yet.",
+      "cannot_connect": "Couldn't reach netflix.com."
+    },
+    "abort": {
+      "already_configured": "That Netflix profile is already connected (its sign-in was updated).",
+      "reauth_successful": "Netflix is connected again."
+    }
+  },
+  "services": {
+    "get_history": {
+      "name": "Get Netflix history",
+      "description": "Recently watched titles from the connected Netflix profiles.",
+      "fields": {
+        "limit": {
+          "name": "How many",
+          "description": "Most titles to return."
+        },
+        "refresh": {
+          "name": "Refresh now",
+          "description": "Ignore the 5-minute cache."
+        }
+      }
+    }
+  }
+}
