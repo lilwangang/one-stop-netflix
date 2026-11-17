@@ -74,6 +74,10 @@
         "refresh": {
           "name": "Refresh now",
           "description": "Ignore the 5-minute cache."
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Netflix profile name or id (default: the last one used)."
         }
       }
     }

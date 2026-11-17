@@ -52,6 +52,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._sid: str | None = None
         self._profiles: list[str] = []
         self._reauth = False
+        self._email: str | None = None
 
     # ---------- sign-in helper ----------
     async def _find_helper(self) -> str | None:
@@ -85,7 +86,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_profile()
         if step == "done":
             if res.get("account"):
-                return await self._create_helper(res["account"], res.get("profile"))
+                return await self._create_helper(res["account"], res.get("profile"), res.get("profiles") or [])
             return await self._create({CONF_NETFLIX_ID: res["netflix_id"], CONF_SECURE_ID: res["secure_netflix_id"]}, res.get("profile"))
         return self.async_show_form(step_id="email", data_schema=self._email_schema(), errors={"base": "helper"},
                                     description_placeholders={"message": res.get("message") or "Unknown problem."})
@@ -102,7 +103,8 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_email(self, user_input=None):
         if user_input is None:
             return self.async_show_form(step_id="email", data_schema=self._email_schema(), description_placeholders={"message": ""})
-        return await self._route(await self._call("/netflix/start", {"email": user_input["email"]}))
+        self._email = user_input["email"].strip()
+        return await self._route(await self._call("/netflix/start", {"email": self._email}))
 
     async def async_step_code(self, user_input=None, message: str = ""):
         if user_input is None:
@@ -143,13 +145,13 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured(updates=data)
         return self.async_create_entry(title=f"Netflix – {name}" if name else "Netflix", data=data)
 
-    async def _create_helper(self, account: str, profile: str | None):
-        data = {"account": account, "helper": self._helper, "profile": profile}
+    async def _create_helper(self, account: str, profile: str | None, profiles: list):
+        data = {"account": account, "helper": self._helper, "profile": profile, "profiles": profiles, "email": self._email}
         if self._reauth:
             return self.async_update_reload_and_abort(self._get_reauth_entry(), data=data)
-        await self.async_set_unique_id((profile or account).lower())
+        await self.async_set_unique_id((self._email or account).lower())
         self._abort_if_unique_id_configured(updates=data)
-        return self.async_create_entry(title=f"Netflix – {profile}" if profile else "Netflix", data=data)
+        return self.async_create_entry(title=f"Netflix ({self._email})" if self._email else "Netflix", data=data)
 
     # ---------- manual (advanced) ----------
     async def async_step_cookies(self, user_input: dict[str, Any] | None = None):

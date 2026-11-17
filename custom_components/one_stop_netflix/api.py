@@ -137,9 +137,11 @@ class HelperHistory:
         self._s, self.base, self.account, self.profile = session, base, account, profile
         self.cookies_changed = False
 
-    async def viewing_activity(self, pages: int = 1, page_size: int = 40) -> list[dict[str, Any]]:
+    profiles: list = []
+
+    async def viewing_activity(self, pages: int = 1, page_size: int = 40, profile: str | None = None) -> list[dict[str, Any]]:
         try:
-            async with self._s.post(self.base + "/netflix/history", json={"account": self.account, "size": page_size * pages},
+            async with self._s.post(self.base + "/netflix/history", json={"account": self.account, "size": page_size * pages, "profile": profile},
                                     timeout=aiohttp.ClientTimeout(total=60)) as r:
                 data = await r.json(content_type=None)
         except Exception as err:
@@ -148,6 +150,7 @@ class HelperHistory:
             raise NetflixAuthError(data["error"])
         if data.get("error"):
             raise NetflixError(data["error"])
-        if data.get("profile") and not self.profile:
-            self.profile = data["profile"]
+        if data.get("profiles"):
+            self.profiles = data["profiles"]
+        self.active = data.get("profile_guid")
         return [_item(x) for x in data.get("items") or []]

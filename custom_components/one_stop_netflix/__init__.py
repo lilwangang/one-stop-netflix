@@ -14,6 +14,7 @@ from .const import CACHE_SECONDS, CONF_NETFLIX_ID, CONF_SECURE_ID, DOMAIN
 
 SERVICE = "get_history"
 SCHEMA = vol.Schema({vol.Optional("limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
+                     vol.Optional("profile"): str,
                      vol.Optional("refresh", default=False): bool})
 
 
@@ -25,30 +26,34 @@ class Link:
             self.api = HelperHistory(sess, entry.data["helper"], entry.data["account"], entry.data.get("profile"))
         else:
             self.api = NetflixHistory(sess, entry.data[CONF_NETFLIX_ID], entry.data[CONF_SECURE_ID])
-        self.items: list = []
-        self.t = 0.0
+        self.cache: dict = {}
         self.error: str | None = None
 
-    async def fetch(self, refresh: bool = False) -> list:
-        if not refresh and self.items and time.time() - self.t < CACHE_SECONDS:
-            return self.items
+    async def fetch(self, refresh: bool = False, profile: str | None = None) -> list:
+        hit = self.cache.get(profile)
+        if not refresh and hit and time.time() - hit[0] < CACHE_SECONDS:
+            return hit[1]
         try:
-            self.items = await self.api.viewing_activity(pages=2)
-            self.t, self.error = time.time(), None
+            if isinstance(self.api, HelperHistory):
+                items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile)
+            else:
+                items = await self.api.viewing_activity(pages=2)
+            self.cache[profile] = (time.time(), items)
+            self.error = None
         except NetflixAuthError as err:
             self.error = "signed_out"
             self.entry.async_start_reauth(self.hass)
             raise HomeAssistantError(f"Netflix needs to be connected again: {err}") from err
         except NetflixError as err:
             self.error = str(err)
-            if self.items:
-                return self.items
+            if hit:
+                return hit[1]
             raise HomeAssistantError(f"Couldn't read Netflix history: {err}") from err
         if self.api.cookies_changed:
             self.api.cookies_changed = False
             self.hass.config_entries.async_update_entry(self.entry, data={
                 **self.entry.data, CONF_NETFLIX_ID: self.api.netflix_id, CONF_SECURE_ID: self.api.secure_id})
-        return self.items
+        return items
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -65,10 +70,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             links = list(hass.data.get(DOMAIN, {}).values())
             if not links:
                 raise HomeAssistantError("Netflix isn't connected")
-            out = []
+            out, profiles, active = [], [], None
             for l in links:
-                items = await l.fetch(call.data.get("refresh", False))
-                out.extend({**i, "profile": l.api.profile or l.entry.title} for i in items)
+                items = await l.fetch(call.data.get("refresh", False), call.data.get("profile"))
+                plist = getattr(l.api, "profiles", None) or l.entry.data.get("profiles") or []
+                profiles += plist
+                active = getattr(l.api, "active", None) or active
+                name = next((p["name"] for p in plist if p.get("guid") == active), None) or l.api.profile or l.entry.title
+                out.extend({**i, "profile": name} for i in items)
             out.sort(key=lambda i: i["ts"], reverse=True)
             seen, uniq = set(), []
             for i in out:
@@ -77,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     continue
                 seen.add(k)
                 uniq.append(i)
-            return {"items": uniq[: call.data.get("limit", 30)], "profiles": [l.api.profile or l.entry.title for l in links]}
+            return {"items": uniq[: call.data.get("limit", 30)], "profiles": profiles, "profile": active}
 
         hass.services.async_register(DOMAIN, SERVICE, handle, schema=SCHEMA, supports_response=SupportsResponse.ONLY)
     return True
