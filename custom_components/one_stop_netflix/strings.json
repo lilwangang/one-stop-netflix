@@ -3,15 +3,43 @@
     "step": {
       "user": {
         "title": "Connect Netflix",
-        "description": "On a computer, sign in at netflix.com and pick the profile you want (for example the family profile). Then open the browser's developer tools (Chrome: View → Developer → Developer Tools), go to Application → Cookies → https://www.netflix.com, and copy the Value of NetflixId and SecureNetflixId into the boxes below. These act like a password: they stay in Home Assistant and are only sent to netflix.com.",
-        "data": {
-          "netflix_id": "NetflixId",
-          "secure_netflix_id": "SecureNetflixId"
+        "description": "How do you want to connect?",
+        "menu_options": {
+          "email": "Sign in with my Netflix email (recommended)",
+          "cookies": "Advanced: paste sign-in values from a computer"
         }
       },
-      "reauth_confirm": {
-        "title": "Reconnect Netflix",
-        "description": "Netflix signed this connection out (this happens after a password change or every few months). On a computer, sign in at netflix.com and pick the profile you want (for example the family profile). Then open the browser's developer tools (Chrome: View → Developer → Developer Tools), go to Application → Cookies → https://www.netflix.com, and copy the Value of NetflixId and SecureNetflixId into the boxes below. These act like a password: they stay in Home Assistant and are only sent to netflix.com.",
+      "email": {
+        "title": "Connect Netflix",
+        "description": "Enter the email or phone number on the Netflix account. Netflix will send a sign-in code to it.\n\n{message}",
+        "data": {
+          "email": "Netflix email or phone number"
+        }
+      },
+      "code": {
+        "title": "Enter Netflix's code",
+        "description": "Netflix just sent a code to that email or phone. Type it here. It expires in 15 minutes.\n\n{message}",
+        "data": {
+          "code": "Code"
+        }
+      },
+      "password": {
+        "title": "Netflix password",
+        "description": "Netflix is asking for the account password.",
+        "data": {
+          "password": "Password"
+        }
+      },
+      "profile": {
+        "title": "Whose history?",
+        "description": "Pick the Netflix profile to show on the dashboard. Add the integration again for more profiles.",
+        "data": {
+          "profile": "Profile"
+        }
+      },
+      "cookies": {
+        "title": "Connect Netflix (advanced)",
+        "description": "On a computer, sign in at netflix.com and pick the profile. Open the browser's developer tools → Application → Cookies → https://www.netflix.com, and copy the Value of NetflixId and SecureNetflixId. They act like a password and stay in Home Assistant.",
         "data": {
           "netflix_id": "NetflixId",
           "secure_netflix_id": "SecureNetflixId"
@@ -19,13 +47,19 @@
       }
     },
     "error": {
-      "signed_out": "Netflix didn't accept those values. Make sure you copied both, while signed in, with no extra spaces.",
+      "signed_out": "Netflix didn't accept those values.",
       "cannot_read": "Signed in, but Netflix's history page answered in a way this doesn't understand yet.",
-      "cannot_connect": "Couldn't reach netflix.com."
+      "cannot_connect": "Couldn't reach netflix.com.",
+      "helper": "{message}",
+      "wrong_code": "That code didn't work. Check it, or start again to get a new one.",
+      "wrong_password": "That password didn't work."
     },
     "abort": {
       "already_configured": "That Netflix profile is already connected (its sign-in was updated).",
-      "reauth_successful": "Netflix is connected again."
+      "reauth_successful": "Netflix is connected again.",
+      "signed_out": "Netflix signed in but then refused the history request. Try again.",
+      "cannot_read": "Signed in, but Netflix's history page answered in a way this doesn't understand yet.",
+      "cannot_connect": "Couldn't reach netflix.com."
     }
   },
   "services": {
