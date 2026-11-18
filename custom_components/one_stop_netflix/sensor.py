@@ -38,17 +38,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     hass.async_create_task(tracker.tick())
 
 
+BEFORE, AFTER = 20, 150      # a title counts only if Netflix logged it 20 s before to 150 s after this TV pressed play
+
+
 class Tracker:
+    """Strict matching: a title is shown for a TV only when Netflix logged it right as that TV started playing.
+    Anything else (a phone, another TV, browsing) leaves the TV showing just 'Netflix'."""
+
     def __init__(self, hass, link, sensors):
         self.hass, self.link, self.sensors = hass, link, sensors
-        self.tops: dict = {}          # profile guid -> (key, item)
-        self.guess: str | None = None
+        self.presses: dict = {p: [] for p in sensors}   # player -> [epoch seconds it started playing]
+        self.current: dict = {}                          # player -> (item, profile name)
+        self.claimed: set = set()                         # (video id, ts) already given to a TV
+        self.boot = time.time()
         self.busy = False
 
     @callback
     def on_change(self, event):
-        old, new = event.data.get("old_state"), event.data.get("new_state")
+        pl, old, new = event.data.get("entity_id"), event.data.get("old_state"), event.data.get("new_state")
+        if new and new.state == "playing" and _in_netflix(new) and old and old.state not in ("playing", "unknown", "unavailable") \
+                and time.time() - self.boot > 90:
+            self.presses[pl] = [t for t in self.presses.get(pl, []) if time.time() - t < 6 * 3600] + [time.time()]
+            for d in (40, 100, 170):                       # Netflix logs the title shortly after play starts
+                self.hass.loop.call_later(d, lambda: self.hass.async_create_task(self.tick()))
         if _in_netflix(new) != _in_netflix(old):
+            if not _in_netflix(new):
+                self.current.pop(pl, None)
             self.hass.async_create_task(self.tick())
 
     async def tick(self, *_):
@@ -64,23 +79,30 @@ class Tracker:
             if not profiles:
                 await self.link.fetch(refresh=True)
                 profiles = getattr(self.link.api, "profiles", None) or []
-            best = None                       # newest title started on any profile (Netflix records exact start times)
+            recent = []                                       # (ts seconds, item, profile) from the last 6 hours
             for p in profiles:
                 try:
                     items = await self.link.fetch(refresh=True, profile=p["guid"])
                 except Exception:
                     continue
-                if items and (best is None or items[0].get("ts", 0) > best[0].get("ts", 0)):
-                    best = (items[0], p["name"])
-            if best:
-                item, name = best
-                started = item.get("ts", 0) / 1000
-                age = time.time() - started
-                for pl in active:
-                    if age < 8 * 3600:
-                        self.sensors[pl].show(item, name, sure=age < 4 * 3600, started=started)
-                    else:
-                        self.sensors[pl].clear()
+                recent += [(it.get("ts", 0) / 1000, it, p["name"]) for it in items[:10] if time.time() - it.get("ts", 0) / 1000 < 6 * 3600]
+            recent.sort(key=lambda r: r[0])
+            for pl in active:
+                cur = self.current.get(pl)
+                for ts, it, name in recent:
+                    key = (it.get("video_id") or it.get("t"), int(ts))
+                    if key in self.claimed:
+                        continue
+                    if any(-BEFORE <= ts - press <= AFTER for press in self.presses.get(pl, [])):
+                        cur = (it, name, ts); self.claimed.add(key)
+                    elif cur and name == cur[1] and it.get("id") and it.get("id") == cur[0].get("id") and ts > cur[2] \
+                            and self.hass.states.get(pl).state == "playing":
+                        cur = (it, name, ts); self.claimed.add(key)   # next episode of the same show, same profile, TV still playing
+                if cur:
+                    self.current[pl] = cur
+                    self.sensors[pl].show(cur[0], cur[1], sure=True, started=cur[2])
+                else:
+                    self.sensors[pl].plain()
         finally:
             self.busy = False
 
@@ -105,6 +127,11 @@ class NowPlaying(SensorEntity):
                                               "episode": item.get("ep") or None, "profile": profile, "url": item.get("url"),
                                               "confidence": "confirmed" if sure else "likely",
                                               "started": datetime.fromtimestamp(started, timezone.utc).isoformat() if started else None}
+        self.async_write_ha_state()
+
+    def plain(self):
+        self._attr_native_value = "Netflix"
+        self._attr_extra_state_attributes = {"one_stop_now_playing": True, "media_player": self._player, "service": "netflix", "matched": False}
         self.async_write_ha_state()
 
     def clear(self):
