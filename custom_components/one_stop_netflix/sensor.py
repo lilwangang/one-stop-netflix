@@ -18,7 +18,7 @@ POLL = timedelta(seconds=150)
 
 
 def _in_netflix(st) -> bool:
-    return bool(st) and st.state in ("playing", "paused") and (
+    return bool(st) and st.state in ("playing", "paused", "idle", "on") and (
         st.attributes.get("app_id") == NETFLIX_APP or str(st.attributes.get("app_name", "")).lower() == "netflix")
 
 
