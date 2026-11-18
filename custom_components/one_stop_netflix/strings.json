@@ -5,8 +5,9 @@
         "title": "Connect Netflix",
         "description": "How do you want to connect?",
         "menu_options": {
-          "email": "Sign in with my Netflix email (recommended)",
-          "cookies": "Advanced: paste sign-in values from a computer"
+          "email": "Netflix: sign in with email (recommended)",
+          "disney": "Disney+: sign in with email",
+          "cookies": "Advanced: paste Netflix sign-in values from a computer"
         }
       },
       "email": {
@@ -17,15 +18,15 @@
         }
       },
       "code": {
-        "title": "Enter Netflix's code",
-        "description": "Netflix just sent a code to that email or phone. Type it here. It expires in 15 minutes.\n\n{message}",
+        "title": "Enter the code",
+        "description": "A code was just sent to that email or phone. Type it here.\n\n{message}",
         "data": {
           "code": "Code"
         }
       },
       "password": {
-        "title": "Netflix password",
-        "description": "Netflix is asking for the account password.",
+        "title": "Password",
+        "description": "The service is asking for the account password.",
         "data": {
           "password": "Password"
         }
@@ -43,6 +44,13 @@
         "data": {
           "netflix_id": "NetflixId",
           "secure_netflix_id": "SecureNetflixId"
+        }
+      },
+      "disney": {
+        "title": "Connect Disney+",
+        "description": "Enter the email on the Disney+ account.\n\n{message}",
+        "data": {
+          "email": "Disney+ email"
         }
       }
     },
@@ -78,6 +86,10 @@
         "profile": {
           "name": "Profile",
           "description": "Netflix profile name or id (default: the last one used)."
+        },
+        "service": {
+          "name": "Service",
+          "description": "netflix or disney"
         }
       }
     }

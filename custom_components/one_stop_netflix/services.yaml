@@ -11,3 +11,8 @@ get_history:
     profile:
       selector:
         text: {}
+    service:
+      default: netflix
+      selector:
+        select:
+          options: [netflix, disney]

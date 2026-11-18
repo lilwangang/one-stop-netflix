@@ -53,6 +53,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._profiles: list[str] = []
         self._reauth = False
         self._email: str | None = None
+        self._svc = "netflix"
 
     # ---------- sign-in helper ----------
     async def _find_helper(self) -> str | None:
@@ -88,7 +89,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if res.get("account"):
                 return await self._create_helper(res["account"], res.get("profile"), res.get("profiles") or [])
             return await self._create({CONF_NETFLIX_ID: res["netflix_id"], CONF_SECURE_ID: res["secure_netflix_id"]}, res.get("profile"))
-        return self.async_show_form(step_id="email", data_schema=self._email_schema(), errors={"base": "helper"},
+        return self.async_show_form(step_id="disney" if self._svc == "disney" else "email", data_schema=self._email_schema(), errors={"base": "helper"},
                                     description_placeholders={"message": res.get("message") or "Unknown problem."})
 
     def _email_schema(self):
@@ -97,19 +98,25 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         self._helper = await self._find_helper()
         if self._helper:
-            return self.async_show_menu(step_id="user", menu_options=["email", "cookies"])
+            return self.async_show_menu(step_id="user", menu_options=["email", "disney", "cookies"])
         return await self.async_step_cookies()
 
     async def async_step_email(self, user_input=None):
         if user_input is None:
             return self.async_show_form(step_id="email", data_schema=self._email_schema(), description_placeholders={"message": ""})
-        self._email = user_input["email"].strip()
+        self._email, self._svc = user_input["email"].strip(), "netflix"
         return await self._route(await self._call("/netflix/start", {"email": self._email}))
+
+    async def async_step_disney(self, user_input=None):
+        if user_input is None:
+            return self.async_show_form(step_id="disney", data_schema=self._email_schema(), description_placeholders={"message": ""})
+        self._email, self._svc = user_input["email"].strip(), "disney"
+        return await self._route(await self._call("/disney/start", {"email": self._email}))
 
     async def async_step_code(self, user_input=None, message: str = ""):
         if user_input is None:
             return self.async_show_form(step_id="code", data_schema=vol.Schema({vol.Required("code"): str}), description_placeholders={"message": message})
-        res = await self._call("/netflix/answer", {"session": self._sid, "kind": "code", "value": user_input["code"]})
+        res = await self._call(f"/{self._svc}/answer", {"session": self._sid, "kind": "code", "value": user_input["code"]})
         if res.get("step") == "code":
             return self.async_show_form(step_id="code", data_schema=vol.Schema({vol.Required("code"): str}), errors={"base": "wrong_code"},
                                         description_placeholders={"message": res.get("message") or ""})
@@ -119,7 +126,7 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema({vol.Required("password"): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD, autocomplete="current-password"))})
         if user_input is None:
             return self.async_show_form(step_id="password", data_schema=schema)
-        res = await self._call("/netflix/answer", {"session": self._sid, "kind": "password", "value": user_input["password"]})
+        res = await self._call(f"/{self._svc}/answer", {"session": self._sid, "kind": "password", "value": user_input["password"]})
         if res.get("step") == "password":
             return self.async_show_form(step_id="password", data_schema=schema, errors={"base": "wrong_password"})
         return await self._route(res)
@@ -146,12 +153,13 @@ class FlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(title=f"Netflix – {name}" if name else "Netflix", data=data)
 
     async def _create_helper(self, account: str, profile: str | None, profiles: list):
-        data = {"account": account, "helper": self._helper, "profile": profile, "profiles": profiles, "email": self._email}
+        data = {"account": account, "helper": self._helper, "profile": profile, "profiles": profiles, "email": self._email, "service": self._svc}
         if self._reauth:
             return self.async_update_reload_and_abort(self._get_reauth_entry(), data=data)
-        await self.async_set_unique_id((self._email or account).lower())
+        name = "Disney+" if self._svc == "disney" else "Netflix"
+        await self.async_set_unique_id(f"{self._svc}:{(self._email or account).lower()}")
         self._abort_if_unique_id_configured(updates=data)
-        return self.async_create_entry(title=f"Netflix ({self._email})" if self._email else "Netflix", data=data)
+        return self.async_create_entry(title=f"{name} ({self._email})" if self._email else name, data=data)
 
     # ---------- manual (advanced) ----------
     async def async_step_cookies(self, user_input: dict[str, Any] | None = None):

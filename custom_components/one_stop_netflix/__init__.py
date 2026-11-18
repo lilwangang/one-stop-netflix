@@ -1,4 +1,4 @@
-"""One Stop Netflix history: lets One Stop Streaming cards show a profile's real Netflix "Recently played"."""
+"""One Stop streaming history: lets One Stop Streaming cards show real "Recently played" for Netflix and Disney+ profiles."""
 from __future__ import annotations
 
 import time
@@ -15,6 +15,7 @@ from .const import CACHE_SECONDS, CONF_NETFLIX_ID, CONF_SECURE_ID, DOMAIN
 SERVICE = "get_history"
 SCHEMA = vol.Schema({vol.Optional("limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
                      vol.Optional("profile"): str,
+                     vol.Optional("service", default="netflix"): vol.In(["netflix", "disney"]),
                      vol.Optional("refresh", default=False): bool})
 
 
@@ -23,7 +24,7 @@ class Link:
         self.hass, self.entry = hass, entry
         sess = async_get_clientsession(hass)
         if entry.data.get("account"):
-            self.api = HelperHistory(sess, entry.data["helper"], entry.data["account"], entry.data.get("profile"))
+            self.api = HelperHistory(sess, entry.data["helper"], entry.data["account"], entry.data.get("profile"), entry.data.get("service", "netflix"))
         else:
             self.api = NetflixHistory(sess, entry.data[CONF_NETFLIX_ID], entry.data[CONF_SECURE_ID])
         self.cache: dict = {}
@@ -67,9 +68,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.services.has_service(DOMAIN, SERVICE):
         async def handle(call: ServiceCall) -> ServiceResponse:
-            links = list(hass.data.get(DOMAIN, {}).values())
+            svc = call.data.get("service", "netflix")
+            links = [l for l in hass.data.get(DOMAIN, {}).values() if l.entry.data.get("service", "netflix") == svc]
             if not links:
-                raise HomeAssistantError("Netflix isn't connected")
+                return {"items": [], "profiles": [], "profile": None, "connected": False}
             out, profiles, active = [], [], None
             for l in links:
                 items = await l.fetch(call.data.get("refresh", False), call.data.get("profile"))
@@ -86,7 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     continue
                 seen.add(k)
                 uniq.append(i)
-            return {"items": uniq[: call.data.get("limit", 30)], "profiles": profiles, "profile": active}
+            return {"items": uniq[: call.data.get("limit", 30)], "profiles": profiles, "profile": active, "connected": True}
 
         hass.services.async_register(DOMAIN, SERVICE, handle, schema=SCHEMA, supports_response=SupportsResponse.ONLY)
     return True

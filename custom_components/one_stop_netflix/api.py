@@ -118,7 +118,10 @@ def _item(x: dict[str, Any]) -> dict[str, Any]:
     if series and ep.startswith(series):
         ep = ep[len(series):].lstrip(": ")
     ts = x.get("date") or 0
-    return {
+    extra = {"nodate": True} if x.get("nodate") else {}
+    if x.get("image"):
+        extra["image"] = x["image"]
+    return {**extra,
         "t": title,
         "ep": ep,
         "ts": int(ts) if ts else int(time.time() * 1000),
@@ -126,22 +129,22 @@ def _item(x: dict[str, Any]) -> dict[str, Any]:
         "video_id": str(x.get("movieID") or ""),
         "o": "SHOW" if series else "MOVIE",
         "progress": round(100 * (x.get("bookmark") or 0) / x["duration"]) if x.get("duration") else None,
-        "url": f"https://www.netflix.com/title/{x.get('series') or x.get('movieID')}" if (x.get("series") or x.get("movieID")) else None,
+        "url": x.get("url") or (f"https://www.netflix.com/title/{x.get('series') or x.get('movieID')}" if (x.get("series") or x.get("movieID")) else None),
     }
 
 
 class HelperHistory:
     """Reads history through the One Stop Sign-in Helper add-on, which keeps the signed-in browser."""
 
-    def __init__(self, session: aiohttp.ClientSession, base: str, account: str, profile: str | None = None) -> None:
-        self._s, self.base, self.account, self.profile = session, base, account, profile
+    def __init__(self, session: aiohttp.ClientSession, base: str, account: str, profile: str | None = None, service: str = "netflix") -> None:
+        self._s, self.base, self.account, self.profile, self.service = session, base, account, profile, service
         self.cookies_changed = False
 
     profiles: list = []
 
     async def viewing_activity(self, pages: int = 1, page_size: int = 40, profile: str | None = None) -> list[dict[str, Any]]:
         try:
-            async with self._s.post(self.base + "/netflix/history", json={"account": self.account, "size": page_size * pages, "profile": profile},
+            async with self._s.post(self.base + f"/{self.service}/history", json={"account": self.account, "size": page_size * pages, "profile": profile},
                                     timeout=aiohttp.ClientTimeout(total=60)) as r:
                 data = await r.json(content_type=None)
         except Exception as err:
