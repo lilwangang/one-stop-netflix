@@ -1,12 +1,17 @@
 {
   "domain": "one_stop_netflix",
   "name": "One Stop streaming history",
-  "codeowners": ["@lilwangang"],
+  "codeowners": [
+    "@lilwangang"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/lilwangang/one-stop-netflix",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/lilwangang/one-stop-netflix/issues",
-  "after_dependencies": ["hassio"],
+  "after_dependencies": [
+    "hassio",
+    "plex"
+  ],
   "requirements": [],
-  "version": "1.9.0"
+  "version": "1.10.0"
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -11,6 +12,9 @@ import voluptuous as vol
 
 from .api import HelperHistory, NetflixAuthError, NetflixError, NetflixHistory
 from .const import CACHE_SECONDS, CONF_NETFLIX_ID, CONF_SECURE_ID, DOMAIN
+from homeassistant.helpers import config_validation as cv
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SERVICE = "get_history"
 SCHEMA = vol.Schema({vol.Optional("limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
@@ -100,4 +104,31 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE)
+    return True
+
+
+# ---- Plex library browsing that works even when no Plex app is open ----
+# Home Assistant only creates Plex player entities while a Plex app is active, so cards that
+# browse through those entities go blank. This websocket command browses the Plex server directly.
+@websocket_api.websocket_command({vol.Required("type"): "one_stop/plex_browse",
+                                  vol.Optional("media_content_id"): vol.Any(str, None),
+                                  vol.Optional("media_content_type"): vol.Any(str, None)})
+@websocket_api.async_response
+async def ws_plex_browse(hass, connection, msg):
+    try:
+        from homeassistant.components.plex.media_browser import browse_media
+    except ImportError:
+        connection.send_error(msg["id"], "no_plex", "The Plex integration isn't set up")
+        return
+    try:
+        res = await hass.async_add_executor_job(
+            browse_media, hass, False, msg.get("media_content_type"), msg.get("media_content_id"))
+    except Exception as err:  # noqa: BLE001
+        connection.send_error(msg["id"], "browse_failed", str(err))
+        return
+    connection.send_result(msg["id"], res.as_dict())
+
+
+async def async_setup(hass: HomeAssistant, config) -> bool:
+    websocket_api.async_register_command(hass, ws_plex_browse)
     return True
