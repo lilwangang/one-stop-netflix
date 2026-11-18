@@ -16,3 +16,8 @@ get_history:
       selector:
         select:
           options: [netflix, disney]
+    kind:
+      default: history
+      selector:
+        select:
+          options: [history, continue]

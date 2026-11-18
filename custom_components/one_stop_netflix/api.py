@@ -128,7 +128,7 @@ def _item(x: dict[str, Any]) -> dict[str, Any]:
         "id": str(x.get("series") or x.get("movieID") or ""),
         "video_id": str(x.get("movieID") or ""),
         "o": "SHOW" if series else "MOVIE",
-        "progress": round(100 * (x.get("bookmark") or 0) / x["duration"]) if x.get("duration") else None,
+        "progress": x["progress"] if x.get("progress") is not None else (round(100 * (x.get("bookmark") or 0) / x["duration"]) if x.get("duration") else None),
         "url": x.get("url") or (f"https://www.netflix.com/title/{x.get('series') or x.get('movieID')}" if (x.get("series") or x.get("movieID")) else None),
     }
 
@@ -142,9 +142,9 @@ class HelperHistory:
 
     profiles: list = []
 
-    async def viewing_activity(self, pages: int = 1, page_size: int = 40, profile: str | None = None) -> list[dict[str, Any]]:
+    async def viewing_activity(self, pages: int = 1, page_size: int = 40, profile: str | None = None, kind: str = "history") -> list[dict[str, Any]]:
         try:
-            async with self._s.post(self.base + f"/{self.service}/history", json={"account": self.account, "size": page_size * pages, "profile": profile},
+            async with self._s.post(self.base + f"/{self.service}/history", json={"account": self.account, "size": page_size * pages, "profile": profile, "kind": kind},
                                     timeout=aiohttp.ClientTimeout(total=60)) as r:
                 data = await r.json(content_type=None)
         except Exception as err:

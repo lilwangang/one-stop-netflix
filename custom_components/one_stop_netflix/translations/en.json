@@ -90,6 +90,10 @@
         "service": {
           "name": "Service",
           "description": "netflix or disney"
+        },
+        "kind": {
+          "name": "Kind",
+          "description": "history (everything watched) or continue (Continue Watching row)"
         }
       }
     }

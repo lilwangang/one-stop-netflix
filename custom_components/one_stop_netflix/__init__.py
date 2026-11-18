@@ -16,6 +16,7 @@ SERVICE = "get_history"
 SCHEMA = vol.Schema({vol.Optional("limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
                      vol.Optional("profile"): str,
                      vol.Optional("service", default="netflix"): vol.In(["netflix", "disney"]),
+                     vol.Optional("kind", default="history"): vol.In(["history", "continue"]),
                      vol.Optional("refresh", default=False): bool})
 
 
@@ -30,16 +31,17 @@ class Link:
         self.cache: dict = {}
         self.error: str | None = None
 
-    async def fetch(self, refresh: bool = False, profile: str | None = None) -> list:
-        hit = self.cache.get(profile)
+    async def fetch(self, refresh: bool = False, profile: str | None = None, kind: str = "history") -> list:
+        ck = (profile, kind)
+        hit = self.cache.get(ck)
         if not refresh and hit and time.time() - hit[0] < CACHE_SECONDS:
             return hit[1]
         try:
             if isinstance(self.api, HelperHistory):
-                items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile)
+                items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile, kind=kind)
             else:
                 items = await self.api.viewing_activity(pages=2)
-            self.cache[profile] = (time.time(), items)
+            self.cache[ck] = (time.time(), items)
             self.error = None
         except NetflixAuthError as err:
             self.error = "signed_out"
@@ -75,7 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return {"items": [], "profiles": [], "profile": None, "connected": False}
             out, profiles, active = [], [], None
             for l in links:
-                items = await l.fetch(call.data.get("refresh", False), call.data.get("profile"))
+                items = await l.fetch(call.data.get("refresh", False), call.data.get("profile"), call.data.get("kind", "history"))
                 plist = getattr(l.api, "profiles", None) or l.entry.data.get("profiles") or []
                 profiles += plist
                 active = getattr(l.api, "active", None) or active
