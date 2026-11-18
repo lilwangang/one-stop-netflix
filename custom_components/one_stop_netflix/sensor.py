@@ -2,7 +2,8 @@
 account's viewing activity while an Apple TV is in Netflix."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -63,29 +64,23 @@ class Tracker:
             if not profiles:
                 await self.link.fetch(refresh=True)
                 profiles = getattr(self.link.api, "profiles", None) or []
-            changed, today = [], datetime.now().date()
+            best = None                       # newest title started on any profile (Netflix records exact start times)
             for p in profiles:
                 try:
                     items = await self.link.fetch(refresh=True, profile=p["guid"])
                 except Exception:
                     continue
-                if not items:
-                    continue
-                top = items[0]
-                key = f"{top.get('t')}|{top.get('ep')}"
-                prev = self.tops.get(p["guid"])
-                self.tops[p["guid"]] = (key, top, p["name"])
-                if prev is not None and prev[0] != key:
-                    changed.append(p["guid"])
-            if changed:
-                self.guess = changed[0]
-            elif self.guess is None:
-                recent = [g for g, (_, it, _) in self.tops.items() if datetime.fromtimestamp(it.get("ts", 0) / 1000).date() == today]
-                self.guess = recent[0] if recent else None
-            if self.guess and self.guess in self.tops:
-                _, item, name = self.tops[self.guess]
-                for p in active:
-                    self.sensors[p].show(item, name, sure=bool(changed))
+                if items and (best is None or items[0].get("ts", 0) > best[0].get("ts", 0)):
+                    best = (items[0], p["name"])
+            if best:
+                item, name = best
+                started = item.get("ts", 0) / 1000
+                age = time.time() - started
+                for pl in active:
+                    if age < 8 * 3600:
+                        self.sensors[pl].show(item, name, sure=age < 4 * 3600, started=started)
+                    else:
+                        self.sensors[pl].clear()
         finally:
             self.busy = False
 
@@ -104,11 +99,12 @@ class NowPlaying(SensorEntity):
         self._attr_native_value = None
         self._attr_extra_state_attributes = {"one_stop_now_playing": True, "media_player": player}
 
-    def show(self, item, profile, sure):
+    def show(self, item, profile, sure, started=None):
         self._attr_native_value = (item.get("t") or "")[:250]
         self._attr_extra_state_attributes = {"one_stop_now_playing": True, "media_player": self._player, "service": "netflix",
                                               "episode": item.get("ep") or None, "profile": profile, "url": item.get("url"),
-                                              "confidence": "confirmed" if sure else "likely"}
+                                              "confidence": "confirmed" if sure else "likely",
+                                              "started": datetime.fromtimestamp(started, timezone.utc).isoformat() if started else None}
         self.async_write_ha_state()
 
     def clear(self):
