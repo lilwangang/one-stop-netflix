@@ -67,7 +67,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if link.error == "signed_out":
             raise ConfigEntryAuthFailed(str(err)) from err
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = link
-    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
 
     if not hass.services.has_service(DOMAIN, SERVICE):
         async def handle(call: ServiceCall) -> ServiceResponse:
@@ -98,7 +97,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    await hass.config_entries.async_unload_platforms(entry, ["sensor"])
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE)

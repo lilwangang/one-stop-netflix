@@ -8,5 +8,5 @@
   "issue_tracker": "https://github.com/lilwangang/one-stop-netflix/issues",
   "after_dependencies": ["hassio"],
   "requirements": [],
-  "version": "1.8.0"
+  "version": "1.9.0"
 }
