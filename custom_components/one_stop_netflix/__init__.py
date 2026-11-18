@@ -126,7 +126,19 @@ async def ws_plex_browse(hass, connection, msg):
     except Exception as err:  # noqa: BLE001
         connection.send_error(msg["id"], "browse_failed", str(err))
         return
-    connection.send_result(msg["id"], res.as_dict())
+    out = res.as_dict()
+    # thumbnails go through HA's Plex image proxy; sign them so plain <img> tags can load them
+    from datetime import timedelta
+    from homeassistant.components.http.auth import async_sign_path
+
+    def sign(node):
+        t = node.get("thumbnail")
+        if isinstance(t, str) and t.startswith("/api/"):
+            node["thumbnail"] = async_sign_path(hass, t, timedelta(hours=24), refresh_token_id=connection.refresh_token_id)
+        for c in node.get("children") or []:
+            sign(c)
+    sign(out)
+    connection.send_result(msg["id"], out)
 
 
 async def async_setup(hass: HomeAssistant, config) -> bool:
