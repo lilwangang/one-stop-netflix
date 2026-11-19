@@ -157,6 +157,7 @@ class HelperHistory:
             self.profiles = data["profiles"]
         self.active = data.get("profile_guid")
         if kind == "home":
+            self.last_episodes = data.get("episodes") or {}
             return data.get("rows") or []
         return [_item(x) for x in data.get("items") or []]
 

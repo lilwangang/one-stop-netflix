@@ -76,6 +76,8 @@ class Link:
             else:
                 items = await self.api.viewing_activity(pages=2)
             if kind == "home":
+                for vid, eps in (getattr(self.api, "last_episodes", None) or {}).items():
+                    self.cache[("ep", str(vid), profile)] = (time.time(), eps)
                 cont = next((r for r in items if "continue watching" in r.get("title", "").lower()), None)
                 if cont:   # the home page already has Continue watching: keep that list fresh too
                     now = int(time.time() * 1000)
