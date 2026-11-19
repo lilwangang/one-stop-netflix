@@ -13,7 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 import voluptuous as vol
 
-from .api import HelperHistory, NetflixAuthError, NetflixError, NetflixHistory
+from .api import HelperHistory, NetflixAuthError, NetflixError, NetflixHistory, _item
 from .const import CACHE_SECONDS, CONF_NETFLIX_ID, CONF_SECURE_ID, DOMAIN
 from homeassistant.helpers import config_validation as cv
 
@@ -23,7 +23,7 @@ SERVICE = "get_history"
 SCHEMA = vol.Schema({vol.Optional("limit", default=30): vol.All(int, vol.Range(min=1, max=200)),
                      vol.Optional("profile"): str,
                      vol.Optional("service", default="netflix"): vol.In(["netflix", "disney"]),
-                     vol.Optional("kind", default="history"): vol.In(["history", "continue"]),
+                     vol.Optional("kind", default="history"): vol.In(["history", "continue", "home"]),
                      vol.Optional("refresh", default=False): bool})
 
 
@@ -59,7 +59,7 @@ class Link:
             g = p.get("guid") if isinstance(p, dict) else None
             if g:
                 try:
-                    await self.fetch(True, g, "continue")
+                    await self.fetch(True, g, "home")
                 except Exception:  # noqa: BLE001
                     pass
 
@@ -75,6 +75,11 @@ class Link:
                 items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile, kind=kind)
             else:
                 items = await self.api.viewing_activity(pages=2)
+            if kind == "home":
+                cont = next((r for r in items if "continue watching" in r.get("title", "").lower()), None)
+                if cont:   # the home page already has Continue watching: keep that list fresh too
+                    now = int(time.time() * 1000)
+                    self.cache[(profile, "continue")] = (time.time(), [_item({**x, "movieID": x.get("id"), "date": now - i * 60000, "nodate": True}) for i, x in enumerate(cont["items"])])
             if kind == "continue" and not items and hit and hit[1]:
                 items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile, kind=kind)   # page was slow: try once more
             self.cache[ck] = (time.time(), items)
@@ -115,6 +120,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if not links:
                 return {"items": [], "profiles": [], "profile": None, "connected": False}
             out, profiles, active = [], [], None
+            if call.data.get("kind") == "home":
+                l = links[0]
+                rows = await l.fetch(call.data.get("refresh", False), call.data.get("profile"), "home")
+                return {"rows": rows, "profiles": getattr(l.api, "profiles", None) or [], "profile": call.data.get("profile") or getattr(l.api, "active", None), "connected": True}
             for l in links:
                 items = await l.fetch(call.data.get("refresh", False), call.data.get("profile"), call.data.get("kind", "history"))
                 plist = getattr(l.api, "profiles", None) or l.entry.data.get("profiles") or []

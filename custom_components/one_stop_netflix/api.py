@@ -145,7 +145,7 @@ class HelperHistory:
     async def viewing_activity(self, pages: int = 1, page_size: int = 40, profile: str | None = None, kind: str = "history") -> list[dict[str, Any]]:
         try:
             async with self._s.post(self.base + f"/{self.service}/history", json={"account": self.account, "size": page_size * pages, "profile": profile, "kind": kind},
-                                    timeout=aiohttp.ClientTimeout(total=60)) as r:
+                                    timeout=aiohttp.ClientTimeout(total=120)) as r:
                 data = await r.json(content_type=None)
         except Exception as err:
             raise NetflixError(f"Sign-in helper not reachable: {err}") from err
@@ -156,4 +156,6 @@ class HelperHistory:
         if data.get("profiles"):
             self.profiles = data["profiles"]
         self.active = data.get("profile_guid")
+        if kind == "home":
+            return data.get("rows") or []
         return [_item(x) for x in data.get("items") or []]
