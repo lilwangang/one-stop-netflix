@@ -1,13 +1,16 @@
 """One Stop streaming history: lets One Stop Streaming cards show real "Recently played" for Netflix and Disney+ profiles."""
 from __future__ import annotations
 
+import asyncio
 import time
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
 import voluptuous as vol
 
 from .api import HelperHistory, NetflixAuthError, NetflixError, NetflixHistory
@@ -34,18 +37,49 @@ class Link:
             self.api = NetflixHistory(sess, entry.data[CONF_NETFLIX_ID], entry.data[CONF_SECURE_ID])
         self.cache: dict = {}
         self.error: str | None = None
+        self._bg: dict = {}
+
+    def _refresh_later(self, profile, kind) -> None:
+        """Refresh one cached list in the background (once at a time per list)."""
+        ck = (profile, kind)
+        if ck in self._bg and not self._bg[ck].done():
+            return
+        async def run():
+            try:
+                await self.fetch(True, profile, kind)
+            except Exception:  # noqa: BLE001 - keep the old list on errors
+                pass
+        self._bg[ck] = self.hass.async_create_background_task(run(), f"one_stop_netflix refresh {kind}")
+
+    async def warm(self, *_):
+        """Keep every profile's Continue watching ready so cards open instantly."""
+        if self.entry.data.get("service", "netflix") != "netflix" or not isinstance(self.api, HelperHistory):
+            return
+        for p in list(getattr(self.api, "profiles", None) or self.entry.data.get("profiles") or []):
+            g = p.get("guid") if isinstance(p, dict) else None
+            if g:
+                try:
+                    await self.fetch(True, g, "continue")
+                except Exception:  # noqa: BLE001
+                    pass
 
     async def fetch(self, refresh: bool = False, profile: str | None = None, kind: str = "history") -> list:
         ck = (profile, kind)
         hit = self.cache.get(ck)
-        if not refresh and hit and time.time() - hit[0] < CACHE_SECONDS:
+        if not refresh and hit:
+            if time.time() - hit[0] >= CACHE_SECONDS:
+                self._refresh_later(profile, kind)       # answer now with the last list, update behind the scenes
             return hit[1]
         try:
             if isinstance(self.api, HelperHistory):
                 items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile, kind=kind)
             else:
                 items = await self.api.viewing_activity(pages=2)
+            if kind == "continue" and not items and hit and hit[1]:
+                items = await self.api.viewing_activity(pages=1, page_size=60, profile=profile, kind=kind)   # page was slow: try once more
             self.cache[ck] = (time.time(), items)
+            if profile is None and getattr(self.api, "active", None):
+                self.cache[(self.api.active, kind)] = self.cache[ck]
             self.error = None
         except NetflixAuthError as err:
             self.error = "signed_out"
@@ -71,6 +105,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if link.error == "signed_out":
             raise ConfigEntryAuthFailed(str(err)) from err
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = link
+    entry.async_on_unload(async_track_time_interval(hass, link.warm, timedelta(minutes=10)))
+    entry.async_create_background_task(hass, link.warm(), "one_stop_netflix warm")
 
     if not hass.services.has_service(DOMAIN, SERVICE):
         async def handle(call: ServiceCall) -> ServiceResponse:
