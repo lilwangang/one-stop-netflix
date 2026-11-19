@@ -159,3 +159,14 @@ class HelperHistory:
         if kind == "home":
             return data.get("rows") or []
         return [_item(x) for x in data.get("items") or []]
+
+    async def episodes(self, video_id: str, profile: str | None = None) -> dict[str, Any]:
+        try:
+            async with self._s.post(self.base + "/netflix/episodes", json={"account": self.account, "profile": profile, "id": video_id},
+                                    timeout=aiohttp.ClientTimeout(total=60)) as r:
+                data = await r.json(content_type=None)
+        except Exception as err:
+            raise NetflixError(f"Sign-in helper not reachable: {err}") from err
+        if data.get("error") in ("signed_out", "unknown_account"):
+            raise NetflixAuthError(data["error"])
+        return data

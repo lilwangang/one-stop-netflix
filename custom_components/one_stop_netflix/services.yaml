@@ -21,3 +21,16 @@ get_history:
       selector:
         select:
           options: [history, continue]
+get_episodes:
+  name: Get episodes
+  description: Seasons and episodes of a Netflix show for a profile, with where that profile is up to.
+  fields:
+    id:
+      name: Netflix title ID
+      required: true
+      selector:
+        text:
+    profile:
+      name: Profile
+      selector:
+        text:

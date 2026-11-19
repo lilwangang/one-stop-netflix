@@ -142,6 +142,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return {"items": uniq[: call.data.get("limit", 30)], "profiles": profiles, "profile": active, "connected": True}
 
         hass.services.async_register(DOMAIN, SERVICE, handle, schema=SCHEMA, supports_response=SupportsResponse.ONLY)
+
+    if not hass.services.has_service(DOMAIN, "get_episodes"):
+        async def episodes(call: ServiceCall) -> ServiceResponse:
+            links = [l for l in hass.data.get(DOMAIN, {}).values() if l.entry.data.get("service", "netflix") == "netflix" and isinstance(l.api, HelperHistory)]
+            if not links:
+                return {"error": "not_connected", "seasons": []}
+            l, vid, prof = links[0], str(call.data["id"]), call.data.get("profile")
+            ck = ("ep", vid, prof)
+            hit = l.cache.get(ck)
+            if hit and time.time() - hit[0] < 600:
+                return hit[1]
+            try:
+                res = await l.api.episodes(vid, prof)
+            except NetflixError as err:
+                raise HomeAssistantError(f"Couldn't read episodes: {err}") from err
+            if not res.get("error"):
+                l.cache[ck] = (time.time(), res)
+            return res
+        hass.services.async_register(DOMAIN, "get_episodes", episodes, schema=vol.Schema({vol.Required("id"): cv.string, vol.Optional("profile"): cv.string}), supports_response=SupportsResponse.ONLY)
     return True
 
 
@@ -149,6 +168,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE)
+        hass.services.async_remove(DOMAIN, "get_episodes")
     return True
 
 
